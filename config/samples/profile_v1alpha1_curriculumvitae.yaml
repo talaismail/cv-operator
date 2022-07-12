@@ -1,0 +1,6 @@
+apiVersion: profile.example.com/v1alpha1
+kind: CurriculumVitae
+metadata:
+  name: curriculumvitae-sample
+spec:
+  # TODO(user): Add fields here

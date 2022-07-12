@@ -1,0 +1,24 @@
+# permissions for end users to edit curriculumvitaes.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: curriculumvitae-editor-role
+rules:
+- apiGroups:
+  - profile.example.com
+  resources:
+  - curriculumvitaes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - profile.example.com
+  resources:
+  - curriculumvitaes/status
+  verbs:
+  - get

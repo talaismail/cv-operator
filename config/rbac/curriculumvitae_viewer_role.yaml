@@ -1,0 +1,20 @@
+# permissions for end users to view curriculumvitaes.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: curriculumvitae-viewer-role
+rules:
+- apiGroups:
+  - profile.example.com
+  resources:
+  - curriculumvitaes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - profile.example.com
+  resources:
+  - curriculumvitaes/status
+  verbs:
+  - get

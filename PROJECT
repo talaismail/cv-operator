@@ -1,0 +1,19 @@
+domain: example.com
+layout:
+- go.kubebuilder.io/v3
+plugins:
+  manifests.sdk.operatorframework.io/v2: {}
+  scorecard.sdk.operatorframework.io/v2: {}
+projectName: cv-operator
+repo: github.com/talaismail/cv-operator
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: example.com
+  group: profile
+  kind: CurriculumVitae
+  path: github.com/talaismail/cv-operator/api/v1alpha1
+  version: v1alpha1
+version: "3"
