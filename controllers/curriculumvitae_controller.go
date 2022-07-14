@@ -82,6 +82,13 @@ func (r *CurriculumVitaeReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+
+	deployment := r.createDeployment(newConfigMap)
+	err = r.Create(deployment)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	return ctrl.Result{}, err
 }
 
@@ -96,7 +103,75 @@ func (r *CurriculumVitaeReconciler) createConfigMap(curriculumVitae *profilev1al
 		},
 		Data: data
 	}
+
+	ownerRef := &metav1.OwnerReference{
+		APIVersion: curriculumVitae.APIVersion,
+		Kind: curriculumVitae.Kind,
+		Name: curriculumVitae.Name,
+		UID: curriculumVitae.UID,
+	}
+	ownerRefs := []metav1.OwnerReference{*ownerRef}
+	configmap.SetOwnerReferences(ownerRefs)
+	configmap.SetOwnerReferences(ownerRef)
+
 	return configmap
+}
+
+func (r *CurriculumVitaeReconciler) createDeployment(configmap *corev1.ConfigMap) *appsv1.Deployment {
+	deployment := &appsv1.Deployment{
+        ObjectMeta: metav1.ObjectMeta{
+            Name:      configmap.Name,
+            Namespace: configmap.Namespace,
+        },
+		Spec: appsv1.DeploymentSpec{
+            Replicas: 1,
+            Selector: &metav1.LabelSelector{
+                MatchLabels: map[string]string{"app": "cv-server"},
+            },
+            Template: corev1.PodTemplateSpec{
+                ObjectMeta: metav1.ObjectMeta{
+                    Labels: map[string]string{"app": "cv-server"},
+                },
+                Spec: corev1.PodSpec{
+                    Containers: []corev1.Container{{
+                        Image: "quay.io/centos7/httpd-24-centos7",
+                        Name: "webserver",
+                        Ports: []corev1.ContainerPort{{
+                            ContainerPort: 80,
+                            Name: "http",
+                            Protocol: "TCP",
+                        }},
+						VolumeMounts: []corev1.volumeMounts{{
+      						Name: configmap.Name,
+        				  	MountPath: "/etc/config",
+						}},
+                    }},
+					Volumes: []corev1.Volume{{
+						Name: configmap.Name,
+						VolumeSource: corev1.VolumeSource{
+							ConfigMap: &corev1.ConfigMapVolumeSource{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: configmap.Name,
+								},		
+							},							
+						},						
+					}},
+                },
+            },
+        },
+    }
+
+	ownerRef := &metav1.OwnerReference{
+		APIVersion: configmap.APIVersion,
+		Kind: configmap.Kind,
+		Name: configmap.Name,
+		UID: configmap.UID,
+	}
+	ownerRefs := []metav1.OwnerReference{*ownerRef}
+	deployment.SetOwnerReferences(ownerRefs)
+	deployment.SetOwnerReferences(ownerRef)
+
+	return deployment
 }
 
 // SetupWithManager sets up the controller with the Manager.
