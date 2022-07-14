@@ -18,13 +18,18 @@ package controllers
 
 import (
 	"context"
-
+	appsv1 "k8s.io/api/apps/v1"
+    corev1 "k8s.io/api/core/v1"
+    metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	profilev1alpha1 "github.com/talaismail/cv-operator/api/v1alpha1"
+	"html/template"
+    "os"
+	"bytes"
 )
 
 // CurriculumVitaeReconciler reconciles a CurriculumVitae object
@@ -36,6 +41,7 @@ type CurriculumVitaeReconciler struct {
 //+kubebuilder:rbac:groups=profile.example.com,resources=curriculumvitaes,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=profile.example.com,resources=curriculumvitaes/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=profile.example.com,resources=curriculumvitaes/finalizers,verbs=update
+//+kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -49,9 +55,48 @@ type CurriculumVitaeReconciler struct {
 func (r *CurriculumVitaeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = log.FromContext(ctx)
 
-	// TODO(user): your logic here
+	profile := &profilev1alpha1.CurriculumVitae{}
+	err := r.Get(ctx, req.NamespacedName, profile)
+	if err != nil {
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	} 
+	isMarkedToBeDeleted := profile.GetDeletionTimestamp() != nil
+	if isMarkedToBeDeleted {
+		return ctrl.Result{}, nil
+	}
 
-	return ctrl.Result{}, nil
+	t := template.New("index")
+	t, err := template.ParseFiles("assets/index.html")	
+	if err != nil {
+		return ctrl.Result{}, nil
+	}
+	var template bytes.Buffer
+	err = t.Execute(template, profile.Spec)
+	if err != nil {
+		return ctrl.Result{}, nil
+	}
+	index := template.String[]
+
+	newConfigMap := r.createConfigMap(profile, index)
+	err = r.Create(ctx, newConfigMap)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, err
+}
+
+func (r *CurriculumVitaeReconciler) createConfigMap(curriculumVitae *profilev1alpha1.CurriculumVitae, index string) *corev1.ConfigMap {
+	data := map[string]string{
+		"index.html": index,
+    }
+	configmap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: curriculumVitae.Name,
+			Namespace: curriculumVitae.Namespace,
+		},
+		Data: data
+	}
+	return configmap
 }
 
 // SetupWithManager sets up the controller with the Manager.

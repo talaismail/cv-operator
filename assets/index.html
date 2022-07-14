@@ -1,0 +1,51 @@
+<!DOCTYPE html> 
+<html> 
+    <head> 
+        <title>CV</title> 
+    </head> 
+    <body> 
+        <h1>{{.Name.FirstName}} {{.Name.MiddleName}} {{.Name.LastName}}</h1>
+        <h2>Contact Information</h2>
+        <p>{{.ContactInfo.Street}}</p> 
+        <p>{{.ContactInfo.PostalCode}}, {{.ContactInfo.Country}}</p>
+        <p>{{.ContactInfo.Email}}</p>
+        <p>{{.ContactInfo.PhoneNumber}}</p>
+        {{if .Experiences}}
+        <h2>Experiences</h2>
+            {{range .Experiences}}
+            <table>
+                <tr>
+                    <td>{{.Role}}</td>
+                    <td>{{.CompanyName}}</td>  
+                    <td>{{.Date}}</td>
+                </tr>
+            </table>
+            {{end}}
+        {{end}}
+        {{if .Studies}}
+        <h2>Studies</h2>
+            {{range .Studies}}
+            <table>
+                <tr>
+                    <td>{{.Degree}}</td>
+                    <td>{{.UniversityName}}</td>  
+                    <td>{{.Date}}</td>
+                    <td>{{.Grade}}</td>
+                </tr>
+            </table>
+            {{end}}
+        {{end}}
+        {{if .Skills}}
+        <h2>Skills</h2>
+        {{range .Skills}}
+        <table>
+            <tr>
+                <td>{{.Name}}</td>
+                <td>{{.Level}}</td>  
+                <td>{{.Description}}</td>
+            </tr>
+        </table>
+        {{end}}
+    {{end}}
+    </body> 
+</html>

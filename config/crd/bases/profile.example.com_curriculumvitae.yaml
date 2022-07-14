@@ -1,0 +1,147 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.9.0
+  creationTimestamp: null
+  name: curriculumvitae.profile.example.com
+spec:
+  group: profile.example.com
+  names:
+    kind: CurriculumVitae
+    listKind: CurriculumVitaeList
+    plural: curriculumvitae
+    singular: curriculumvitae
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: CurriculumVitae is the Schema for the curriculumvitaes API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: CurriculumVitaeSpec defines the desired state of CurriculumVitae
+            properties:
+              contactInfo:
+                properties:
+                  country:
+                    description: Country of residence.
+                    type: string
+                  email:
+                    description: Email address of the applicant.
+                    type: string
+                  phoneNumber:
+                    description: Telephone number of the applicant.
+                    type: string
+                  postalCode:
+                    description: Postal code of the address.
+                    type: string
+                  street:
+                    description: Street of the address.
+                    type: string
+                required:
+                - country
+                - email
+                - phoneNumber
+                - postalCode
+                - street
+                type: object
+              experiences:
+                items:
+                  properties:
+                    companyName:
+                      description: Company name.
+                      type: string
+                    date:
+                      description: Starting date.
+                      type: string
+                    role:
+                      description: Role at the company.
+                      type: string
+                  required:
+                  - companyName
+                  - date
+                  - role
+                  type: object
+                type: array
+              name:
+                properties:
+                  firstName:
+                    description: Personal name of the applicant.
+                    type: string
+                  lastName:
+                    description: Family name of the applicant.
+                    type: string
+                  middleName:
+                    description: Middle name of the applicant.
+                    type: string
+                required:
+                - firstName
+                - lastName
+                - middleName
+                type: object
+              skills:
+                items:
+                  properties:
+                    description:
+                      description: Description of the skill.
+                      type: string
+                    level:
+                      description: Level of expertise.
+                      type: string
+                    name:
+                      description: Name of the skill.
+                      type: string
+                  required:
+                  - description
+                  - level
+                  - name
+                  type: object
+                type: array
+              studies:
+                items:
+                  properties:
+                    date:
+                      description: Start date.
+                      type: string
+                    degree:
+                      description: Degree earned.
+                      type: string
+                    grade:
+                      description: Grade achieved.
+                      type: string
+                    universityName:
+                      description: Name of the university.
+                      type: string
+                  required:
+                  - date
+                  - degree
+                  - grade
+                  - universityName
+                  type: object
+                type: array
+            required:
+            - contactInfo
+            - name
+            type: object
+          status:
+            description: CurriculumVitaeStatus defines the observed state of CurriculumVitae
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
