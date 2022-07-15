@@ -19,17 +19,16 @@ package controllers
 import (
 	"context"
 	appsv1 "k8s.io/api/apps/v1"
-    corev1 "k8s.io/api/core/v1"
-    metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"bytes"
 	profilev1alpha1 "github.com/talaismail/cv-operator/api/v1alpha1"
 	"html/template"
-    "os"
-	"bytes"
 )
 
 // CurriculumVitaeReconciler reconciles a CurriculumVitae object
@@ -59,23 +58,23 @@ func (r *CurriculumVitaeReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	err := r.Get(ctx, req.NamespacedName, profile)
 	if err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
-	} 
+	}
 	isMarkedToBeDeleted := profile.GetDeletionTimestamp() != nil
 	if isMarkedToBeDeleted {
 		return ctrl.Result{}, nil
 	}
 
 	t := template.New("index")
-	t, err := template.ParseFiles("assets/index.html")	
+	t, err = template.ParseFiles("assets/index.html")
 	if err != nil {
 		return ctrl.Result{}, nil
 	}
 	var template bytes.Buffer
-	err = t.Execute(template, profile.Spec)
+	err = t.Execute(&template, profile.Spec)
 	if err != nil {
 		return ctrl.Result{}, nil
 	}
-	index := template.String[]
+	index := template.String()
 
 	newConfigMap := r.createConfigMap(profile, index)
 	err = r.Create(ctx, newConfigMap)
@@ -83,8 +82,8 @@ func (r *CurriculumVitaeReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
-	deployment := r.createDeployment(newConfigMap)
-	err = r.Create(deployment)
+	deployment := r.createDeployment(profile, newConfigMap)
+	err = r.Create(ctx, deployment)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -95,81 +94,80 @@ func (r *CurriculumVitaeReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 func (r *CurriculumVitaeReconciler) createConfigMap(curriculumVitae *profilev1alpha1.CurriculumVitae, index string) *corev1.ConfigMap {
 	data := map[string]string{
 		"index.html": index,
-    }
+	}
 	configmap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: curriculumVitae.Name,
+			Name:      curriculumVitae.Name,
 			Namespace: curriculumVitae.Namespace,
 		},
-		Data: data
+		Data: data,
 	}
 
 	ownerRef := &metav1.OwnerReference{
 		APIVersion: curriculumVitae.APIVersion,
-		Kind: curriculumVitae.Kind,
-		Name: curriculumVitae.Name,
-		UID: curriculumVitae.UID,
+		Kind:       curriculumVitae.Kind,
+		Name:       curriculumVitae.Name,
+		UID:        curriculumVitae.UID,
 	}
 	ownerRefs := []metav1.OwnerReference{*ownerRef}
 	configmap.SetOwnerReferences(ownerRefs)
-	configmap.SetOwnerReferences(ownerRef)
 
 	return configmap
 }
 
-func (r *CurriculumVitaeReconciler) createDeployment(configmap *corev1.ConfigMap) *appsv1.Deployment {
+func (r *CurriculumVitaeReconciler) createDeployment(curriculumVitae *profilev1alpha1.CurriculumVitae, configmap *corev1.ConfigMap) *appsv1.Deployment {
+	replicas := int32(1)
 	deployment := &appsv1.Deployment{
-        ObjectMeta: metav1.ObjectMeta{
-            Name:      configmap.Name,
-            Namespace: configmap.Namespace,
-        },
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      curriculumVitae.Name,
+			Namespace: curriculumVitae.Namespace,
+		},
 		Spec: appsv1.DeploymentSpec{
-            Replicas: 1,
-            Selector: &metav1.LabelSelector{
-                MatchLabels: map[string]string{"app": "cv-server"},
-            },
-            Template: corev1.PodTemplateSpec{
-                ObjectMeta: metav1.ObjectMeta{
-                    Labels: map[string]string{"app": "cv-server"},
-                },
-                Spec: corev1.PodSpec{
-                    Containers: []corev1.Container{{
-                        Image: "quay.io/centos7/httpd-24-centos7",
-                        Name: "webserver",
-                        Ports: []corev1.ContainerPort{{
-                            ContainerPort: 80,
-                            Name: "http",
-                            Protocol: "TCP",
-                        }},
-						VolumeMounts: []corev1.volumeMounts{{
-      						Name: configmap.Name,
-        				  	MountPath: "/etc/config",
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "cv-server"},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": "cv-server"},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Image: "quay.io/centos7/httpd-24-centos7",
+						Name:  "webserver",
+						Ports: []corev1.ContainerPort{{
+							ContainerPort: 8080,
+							Name:          "http",
+							Protocol:      "TCP",
 						}},
-                    }},
+						VolumeMounts: []corev1.VolumeMount{{
+							Name:      configmap.Name,
+							MountPath: "/var/html/www/",
+						}},
+					}},
 					Volumes: []corev1.Volume{{
 						Name: configmap.Name,
 						VolumeSource: corev1.VolumeSource{
 							ConfigMap: &corev1.ConfigMapVolumeSource{
 								LocalObjectReference: corev1.LocalObjectReference{
 									Name: configmap.Name,
-								},		
-							},							
-						},						
+								},
+							},
+						},
 					}},
-                },
-            },
-        },
-    }
+				},
+			},
+		},
+	}
 
 	ownerRef := &metav1.OwnerReference{
-		APIVersion: configmap.APIVersion,
-		Kind: configmap.Kind,
-		Name: configmap.Name,
-		UID: configmap.UID,
+		APIVersion: curriculumVitae.APIVersion,
+		Kind:       curriculumVitae.Kind,
+		Name:       curriculumVitae.Name,
+		UID:        curriculumVitae.UID,
 	}
 	ownerRefs := []metav1.OwnerReference{*ownerRef}
 	deployment.SetOwnerReferences(ownerRefs)
-	deployment.SetOwnerReferences(ownerRef)
 
 	return deployment
 }
