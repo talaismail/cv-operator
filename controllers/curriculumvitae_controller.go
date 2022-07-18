@@ -29,6 +29,7 @@ import (
 	"bytes"
 	profilev1alpha1 "github.com/talaismail/cv-operator/api/v1alpha1"
 	"html/template"
+	"io/ioutil"
 )
 
 // CurriculumVitaeReconciler reconciles a CurriculumVitae object
@@ -37,9 +38,9 @@ type CurriculumVitaeReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=profile.example.com,resources=curriculumvitaes,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=profile.example.com,resources=curriculumvitaes/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=profile.example.com,resources=curriculumvitaes/finalizers,verbs=update
+//+kubebuilder:rbac:groups=profile.example.com,resources=curriculumvitae,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=profile.example.com,resources=curriculumvitae/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=profile.example.com,resources=curriculumvitae/finalizers,verbs=update
 //+kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -76,13 +77,24 @@ func (r *CurriculumVitaeReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 	index := template.String()
 
-	newConfigMap := r.createConfigMap(profile, index)
-	err = r.Create(ctx, newConfigMap)
+	indexConfigMap := r.createConfigMap(profile, "index.html", index)
+	err = r.Create(ctx, indexConfigMap)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	deployment := r.createDeployment(profile, newConfigMap)
+	content, err := ioutil.ReadFile("/assets/httpd.conf")
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	httpdConfigMap := r.createConfigMap(profile, "httpd.conf", string(content))
+	err = r.Create(ctx, httpdConfigMap)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	deployment := r.createDeployment(profile, indexConfigMap, httpdConfigMap)
 	err = r.Create(ctx, deployment)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -91,9 +103,9 @@ func (r *CurriculumVitaeReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	return ctrl.Result{}, err
 }
 
-func (r *CurriculumVitaeReconciler) createConfigMap(curriculumVitae *profilev1alpha1.CurriculumVitae, index string) *corev1.ConfigMap {
+func (r *CurriculumVitaeReconciler) createConfigMap(curriculumVitae *profilev1alpha1.CurriculumVitae, key string, value string) *corev1.ConfigMap {
 	data := map[string]string{
-		"index.html": index,
+		key: value,
 	}
 	configmap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -115,7 +127,7 @@ func (r *CurriculumVitaeReconciler) createConfigMap(curriculumVitae *profilev1al
 	return configmap
 }
 
-func (r *CurriculumVitaeReconciler) createDeployment(curriculumVitae *profilev1alpha1.CurriculumVitae, configmap *corev1.ConfigMap) *appsv1.Deployment {
+func (r *CurriculumVitaeReconciler) createDeployment(curriculumVitae *profilev1alpha1.CurriculumVitae, indexConfigMap *corev1.ConfigMap, httpdConfigMap *corev1.ConfigMap) *appsv1.Deployment {
 	replicas := int32(1)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -141,20 +153,34 @@ func (r *CurriculumVitaeReconciler) createDeployment(curriculumVitae *profilev1a
 							Protocol:      "TCP",
 						}},
 						VolumeMounts: []corev1.VolumeMount{{
-							Name:      configmap.Name,
+							Name:      indexConfigMap.Name,
 							MountPath: "/var/html/www/",
-						}},
+						},
+							{
+								Name:      httpdConfigMap.Name,
+								MountPath: "/etc/httpd/conf/",
+							}},
 					}},
 					Volumes: []corev1.Volume{{
-						Name: configmap.Name,
+						Name: indexConfigMap.Name,
 						VolumeSource: corev1.VolumeSource{
 							ConfigMap: &corev1.ConfigMapVolumeSource{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: configmap.Name,
+									Name: indexConfigMap.Name,
 								},
 							},
 						},
-					}},
+					},
+						{
+							Name: httpdConfigMap.Name,
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: httpdConfigMap.Name,
+									},
+								},
+							},
+						}},
 				},
 			},
 		},

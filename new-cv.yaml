@@ -1,0 +1,17 @@
+apiVersion: "profile.example.com/v1alpha1"
+kind: CurriculumVitae
+metadata:
+  name: my-new-cv
+  namespace: cv-operator-system
+spec:
+  name: 
+    firstName: John
+    middleName: Max
+    lastName: Does
+
+  contactInfo:
+    postalCode: "10000"
+    street: some Street
+    country: New Zealand
+    email: "john@gmail.com"
+    phoneNumber: "0123456789"

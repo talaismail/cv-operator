@@ -19,7 +19,7 @@ rules:
 - apiGroups:
   - profile.example.com
   resources:
-  - curriculumvitaes
+  - curriculumvitae
   verbs:
   - create
   - delete
@@ -31,13 +31,13 @@ rules:
 - apiGroups:
   - profile.example.com
   resources:
-  - curriculumvitaes/finalizers
+  - curriculumvitae/finalizers
   verbs:
   - update
 - apiGroups:
   - profile.example.com
   resources:
-  - curriculumvitaes/status
+  - curriculumvitae/status
   verbs:
   - get
   - patch
