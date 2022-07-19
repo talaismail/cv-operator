@@ -43,6 +43,8 @@ type CurriculumVitaeReconciler struct {
 //+kubebuilder:rbac:groups=profile.example.com,resources=curriculumvitae/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=profile.example.com,resources=curriculumvitae/finalizers,verbs=update
 //+kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch
+//+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -56,8 +58,9 @@ type CurriculumVitaeReconciler struct {
 func (r *CurriculumVitaeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = log.FromContext(ctx)
 
+	var err error
 	profile := &profilev1alpha1.CurriculumVitae{}
-	err := r.Get(ctx, req.NamespacedName, profile)
+	err = r.Get(ctx, req.NamespacedName, profile)
 	if err != nil {
 		log.Log.Info("Requeue since resource was not found.")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -69,7 +72,7 @@ func (r *CurriculumVitaeReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	oldDeployment := &appsv1.Deployment{}
-	err := r.Get(context.TODO(), types.NamespacedName{Name: profile.Name + "index"}, oldDeployment)
+	err = r.Get(context.TODO(), types.NamespacedName{Name: profile.Name + "index"}, oldDeployment)
 	if err == nil {
 		log.Log.Info("Delete outdated object.")
 		err = r.Delete(context.TODO(), oldDeployment)
@@ -77,7 +80,7 @@ func (r *CurriculumVitaeReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	oldIndexConfigMap := &corev1.ConfigMap{}
-	err := r.Get(context.TODO(), types.NamespacedName{Name: profile.Name + "index"}, oldIndexConfigMap)
+	err = r.Get(context.TODO(), types.NamespacedName{Name: profile.Name + "index"}, oldIndexConfigMap)
 	if err == nil {
 		log.Log.Info("Delete outdated object.")
 		err = r.Delete(context.TODO(), oldIndexConfigMap)
@@ -85,7 +88,7 @@ func (r *CurriculumVitaeReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	oldHttpdConfigMap := &corev1.ConfigMap{}
-	err := r.Get(context.TODO(), types.NamespacedName{Name: profile.Name + "index"}, oldHttpdConfigMap)
+	err = r.Get(context.TODO(), types.NamespacedName{Name: profile.Name + "index"}, oldHttpdConfigMap)
 	if err == nil {
 		log.Log.Info("Delete outdated object.")
 		err = r.Delete(context.TODO(), oldHttpdConfigMap)
@@ -114,9 +117,9 @@ func (r *CurriculumVitaeReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
-	content, err := ioutil.ReadFile("/assets/httpd.conf")
+	content, err := ioutil.ReadFile("assets/httpd.conf")
 	if err != nil {
-		log.Log.Info("Finish since there is an error.")
+		log.Log.Info("Finish since there is an error in reading the httpd.conf file.")
 		return ctrl.Result{}, nil
 	}
 
