@@ -22,6 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -58,58 +59,91 @@ func (r *CurriculumVitaeReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	profile := &profilev1alpha1.CurriculumVitae{}
 	err := r.Get(ctx, req.NamespacedName, profile)
 	if err != nil {
+		log.Log.Info("Requeue since resource was not found.")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	isMarkedToBeDeleted := profile.GetDeletionTimestamp() != nil
 	if isMarkedToBeDeleted {
+		log.Log.Info("Finish reconcile since resource was deleted.")
 		return ctrl.Result{}, nil
+	}
+
+	oldDeployment := &appsv1.Deployment{}
+	err := r.Get(context.TODO(), types.NamespacedName{Name: profile.Name + "index"}, oldDeployment)
+	if err == nil {
+		log.Log.Info("Delete outdated object.")
+		err = r.Delete(context.TODO(), oldDeployment)
+		return ctrl.Result{}, err
+	}
+
+	oldIndexConfigMap := &corev1.ConfigMap{}
+	err := r.Get(context.TODO(), types.NamespacedName{Name: profile.Name + "index"}, oldIndexConfigMap)
+	if err == nil {
+		log.Log.Info("Delete outdated object.")
+		err = r.Delete(context.TODO(), oldIndexConfigMap)
+		return ctrl.Result{}, err
+	}
+
+	oldHttpdConfigMap := &corev1.ConfigMap{}
+	err := r.Get(context.TODO(), types.NamespacedName{Name: profile.Name + "index"}, oldHttpdConfigMap)
+	if err == nil {
+		log.Log.Info("Delete outdated object.")
+		err = r.Delete(context.TODO(), oldHttpdConfigMap)
+		return ctrl.Result{}, err
 	}
 
 	t := template.New("index")
 	t, err = template.ParseFiles("assets/index.html")
 	if err != nil {
+		log.Log.Info("Finish since there is an error in the template.")
 		return ctrl.Result{}, nil
 	}
 	var template bytes.Buffer
 	err = t.Execute(&template, profile.Spec)
 	if err != nil {
+		log.Log.Info("Finish execution since there is an error.")
 		return ctrl.Result{}, nil
 	}
+
 	index := template.String()
 
-	indexConfigMap := r.createConfigMap(profile, "index.html", index)
+	indexConfigMap := r.createConfigMap(profile, "index.html", index, "index")
 	err = r.Create(ctx, indexConfigMap)
 	if err != nil {
+		log.Log.Info("Create index configmap.")
 		return ctrl.Result{}, err
 	}
 
 	content, err := ioutil.ReadFile("/assets/httpd.conf")
 	if err != nil {
-		return ctrl.Result{}, err
+		log.Log.Info("Finish since there is an error.")
+		return ctrl.Result{}, nil
 	}
 
-	httpdConfigMap := r.createConfigMap(profile, "httpd.conf", string(content))
+	httpdConfigMap := r.createConfigMap(profile, "httpd.conf", string(content), "httpd")
 	err = r.Create(ctx, httpdConfigMap)
 	if err != nil {
+		log.Log.Info("Create httpd configmap.")
 		return ctrl.Result{}, err
 	}
 
 	deployment := r.createDeployment(profile, indexConfigMap, httpdConfigMap)
 	err = r.Create(ctx, deployment)
 	if err != nil {
+		log.Log.Info("Create deployment.")
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{}, err
+	return ctrl.Result{}, nil
 }
 
-func (r *CurriculumVitaeReconciler) createConfigMap(curriculumVitae *profilev1alpha1.CurriculumVitae, key string, value string) *corev1.ConfigMap {
+func (r *CurriculumVitaeReconciler) createConfigMap(curriculumVitae *profilev1alpha1.CurriculumVitae, key string, value string, suffix string) *corev1.ConfigMap {
 	data := map[string]string{
 		key: value,
 	}
 	configmap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      curriculumVitae.Name,
+			Name:      curriculumVitae.Name + suffix,
 			Namespace: curriculumVitae.Namespace,
 		},
 		Data: data,
