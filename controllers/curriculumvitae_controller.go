@@ -123,14 +123,14 @@ func (r *CurriculumVitaeReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	httpdConfigMap := r.createConfigMap(profile, "httpd.conf", string(content), "httpd")
 	err = r.Create(ctx, httpdConfigMap)
 	if err != nil {
-		log.Log.Info("Create httpd configmap.")
+		log.Log.Info("Requeue since there was an error.")
 		return ctrl.Result{}, err
 	}
 
 	deployment := r.createDeployment(profile, indexConfigMap, httpdConfigMap)
 	err = r.Create(ctx, deployment)
 	if err != nil {
-		log.Log.Info("Create deployment.")
+		log.Log.Info("Requeue since there was an error.")
 		return ctrl.Result{}, err
 	}
 
