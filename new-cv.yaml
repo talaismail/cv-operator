@@ -7,7 +7,7 @@ spec:
   name: 
     firstName: John
     middleName: Max
-    lastName: Does
+    lastName: Doe
 
   contactInfo:
     postalCode: "10000"
