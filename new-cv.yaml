@@ -2,13 +2,11 @@ apiVersion: "profile.example.com/v1alpha1"
 kind: CurriculumVitae
 metadata:
   name: my-new-cv
-  namespace: cv-operator-system
 spec:
-  name: 
+  name:
     firstName: John
-    middleName: Max
+    middleName: Maxxxxxxx
     lastName: Doe
-
   contactInfo:
     postalCode: "10000"
     street: some Street

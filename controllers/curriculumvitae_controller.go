@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,9 +29,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"bytes"
-	profilev1alpha1 "github.com/talaismail/cv-operator/api/v1alpha1"
 	"html/template"
-	"io/ioutil"
+
+	profilev1alpha1 "github.com/talaismail/cv-operator/api/v1alpha1"
 )
 
 // CurriculumVitaeReconciler reconciles a CurriculumVitae object
@@ -42,9 +43,8 @@ type CurriculumVitaeReconciler struct {
 //+kubebuilder:rbac:groups=profile.example.com,resources=curriculumvitae,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=profile.example.com,resources=curriculumvitae/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=profile.example.com,resources=curriculumvitae/finalizers,verbs=update
-//+kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch
+//+kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -62,91 +62,76 @@ func (r *CurriculumVitaeReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	profile := &profilev1alpha1.CurriculumVitae{}
 	err = r.Get(ctx, req.NamespacedName, profile)
 	if err != nil {
-		log.Log.Info("Requeue since resource was not found.")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+
 	isMarkedToBeDeleted := profile.GetDeletionTimestamp() != nil
 	if isMarkedToBeDeleted {
-		log.Log.Info("Finish reconcile since resource was deleted.")
+		log.Log.Info("Stop reconciling since resource is marked to be deleted.")
 		return ctrl.Result{}, nil
 	}
 
 	oldDeployment := &appsv1.Deployment{}
-	err = r.Get(context.TODO(), types.NamespacedName{Name: profile.Name + "index"}, oldDeployment)
+	err = r.Get(context.TODO(), types.NamespacedName{Name: profile.Name, Namespace: profile.Namespace}, oldDeployment)
 	if err == nil {
-		log.Log.Info("Delete outdated object.")
+		log.Log.Info("Delete Deployment as it is outdated.")
 		err = r.Delete(context.TODO(), oldDeployment)
-		return ctrl.Result{}, err
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	oldIndexConfigMap := &corev1.ConfigMap{}
-	err = r.Get(context.TODO(), types.NamespacedName{Name: profile.Name + "index"}, oldIndexConfigMap)
+	err = r.Get(context.TODO(), types.NamespacedName{Name: profile.Name, Namespace: profile.Namespace}, oldIndexConfigMap)
 	if err == nil {
-		log.Log.Info("Delete outdated object.")
+		log.Log.Info("Delete ConfigMap as it is outdated.")
 		err = r.Delete(context.TODO(), oldIndexConfigMap)
-		return ctrl.Result{}, err
-	}
-
-	oldHttpdConfigMap := &corev1.ConfigMap{}
-	err = r.Get(context.TODO(), types.NamespacedName{Name: profile.Name + "index"}, oldHttpdConfigMap)
-	if err == nil {
-		log.Log.Info("Delete outdated object.")
-		err = r.Delete(context.TODO(), oldHttpdConfigMap)
-		return ctrl.Result{}, err
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	t := template.New("index")
 	t, err = template.ParseFiles("assets/index.html")
 	if err != nil {
-		log.Log.Info("Finish since there is an error in the template.")
+		log.Log.Info("Stop reconciling since the could not be parsed.")
 		return ctrl.Result{}, nil
 	}
 	var template bytes.Buffer
 	err = t.Execute(&template, profile.Spec)
 	if err != nil {
-		log.Log.Info("Finish execution since there is an error.")
+		log.Log.Info("Stop reconciling since the template could not be instanciated.")
 		return ctrl.Result{}, nil
 	}
 
 	index := template.String()
 
-	indexConfigMap := r.createConfigMap(profile, "index.html", index, "index")
+	indexConfigMap := r.createConfigMap(profile, "index.html", index)
+	log.Log.Info("Create configmap.")
 	err = r.Create(ctx, indexConfigMap)
 	if err != nil {
-		log.Log.Info("Create index configmap.")
+		log.Log.Info("Requeue since there was an error while creating the ConfigMap.")
 		return ctrl.Result{}, err
 	}
 
-	content, err := ioutil.ReadFile("assets/httpd.conf")
-	if err != nil {
-		log.Log.Info("Finish since there is an error in reading the httpd.conf file.")
-		return ctrl.Result{}, nil
-	}
-
-	httpdConfigMap := r.createConfigMap(profile, "httpd.conf", string(content), "httpd")
-	err = r.Create(ctx, httpdConfigMap)
-	if err != nil {
-		log.Log.Info("Requeue since there was an error.")
-		return ctrl.Result{}, err
-	}
-
-	deployment := r.createDeployment(profile, indexConfigMap, httpdConfigMap)
+	deployment := r.createDeployment(profile, indexConfigMap)
+	log.Log.Info("Create deployment.")
 	err = r.Create(ctx, deployment)
 	if err != nil {
-		log.Log.Info("Requeue since there was an error.")
+		log.Log.Info("Requeue since there was an error while creating the Deployment.")
 		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
 }
 
-func (r *CurriculumVitaeReconciler) createConfigMap(curriculumVitae *profilev1alpha1.CurriculumVitae, key string, value string, suffix string) *corev1.ConfigMap {
+func (r *CurriculumVitaeReconciler) createConfigMap(curriculumVitae *profilev1alpha1.CurriculumVitae, key string, value string) *corev1.ConfigMap {
 	data := map[string]string{
 		key: value,
 	}
 	configmap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      curriculumVitae.Name + suffix,
+			Name:      curriculumVitae.Name,
 			Namespace: curriculumVitae.Namespace,
 		},
 		Data: data,
@@ -164,7 +149,7 @@ func (r *CurriculumVitaeReconciler) createConfigMap(curriculumVitae *profilev1al
 	return configmap
 }
 
-func (r *CurriculumVitaeReconciler) createDeployment(curriculumVitae *profilev1alpha1.CurriculumVitae, indexConfigMap *corev1.ConfigMap, httpdConfigMap *corev1.ConfigMap) *appsv1.Deployment {
+func (r *CurriculumVitaeReconciler) createDeployment(curriculumVitae *profilev1alpha1.CurriculumVitae, indexConfigMap *corev1.ConfigMap) *appsv1.Deployment {
 	replicas := int32(1)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -184,40 +169,32 @@ func (r *CurriculumVitaeReconciler) createDeployment(curriculumVitae *profilev1a
 					Containers: []corev1.Container{{
 						Image: "quay.io/centos7/httpd-24-centos7",
 						Name:  "webserver",
-						Ports: []corev1.ContainerPort{{
-							ContainerPort: 8080,
-							Name:          "http",
-							Protocol:      "TCP",
-						}},
-						VolumeMounts: []corev1.VolumeMount{{
-							Name:      indexConfigMap.Name,
-							MountPath: "/var/html/www/",
-						},
+						Ports: []corev1.ContainerPort{
 							{
-								Name:      httpdConfigMap.Name,
-								MountPath: "/etc/httpd/conf/",
-							}},
+								ContainerPort: 8080,
+								Name:          "http",
+								Protocol:      "TCP",
+							},
+						},
+						VolumeMounts: []corev1.VolumeMount{
+							{
+								Name:      indexConfigMap.Name,
+								MountPath: "/opt/rh/httpd24/root/var/www/html/",
+							},
+						},
 					}},
-					Volumes: []corev1.Volume{{
-						Name: indexConfigMap.Name,
-						VolumeSource: corev1.VolumeSource{
-							ConfigMap: &corev1.ConfigMapVolumeSource{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: indexConfigMap.Name,
+					Volumes: []corev1.Volume{
+						{
+							Name: indexConfigMap.Name,
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: indexConfigMap.Name,
+									},
 								},
 							},
 						},
 					},
-						{
-							Name: httpdConfigMap.Name,
-							VolumeSource: corev1.VolumeSource{
-								ConfigMap: &corev1.ConfigMapVolumeSource{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: httpdConfigMap.Name,
-									},
-								},
-							},
-						}},
 				},
 			},
 		},
