@@ -159,11 +159,11 @@ func (r *CurriculumVitaeReconciler) createDeployment(curriculumVitae *profilev1a
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{"app": "cv-server"},
+				MatchLabels: map[string]string{"app": curriculumVitae.Name},
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{"app": "cv-server"},
+					Labels: map[string]string{"app": curriculumVitae.Name},
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{

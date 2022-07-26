@@ -1,10 +1,10 @@
 apiVersion: "profile.example.com/v1alpha1"
 kind: CurriculumVitae
 metadata:
-  name: my-new-cv
+  name: my-new-cv-2
 spec:
   name:
-    firstName: John
+    firstName: Johnny
     middleName: Maxxxx
     lastName: Doe
   contactInfo:
