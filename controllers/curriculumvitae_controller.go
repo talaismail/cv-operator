@@ -19,15 +19,16 @@ package controllers
 import (
 	"context"
 
+	routev1 "github.com/openshift/api/route/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	routev1 "github.com/openshift/api/route/v1"
 
 	"bytes"
 	"html/template"
@@ -44,8 +45,10 @@ type CurriculumVitaeReconciler struct {
 //+kubebuilder:rbac:groups=profile.example.com,resources=curriculumvitae,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=profile.example.com,resources=curriculumvitae/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=profile.example.com,resources=curriculumvitae/finalizers,verbs=update
-//+kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=route.openshift.io,resources=routes,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -70,6 +73,26 @@ func (r *CurriculumVitaeReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if isMarkedToBeDeleted {
 		log.Log.Info("Stop reconciling since resource is marked to be deleted.")
 		return ctrl.Result{}, nil
+	}
+
+	oldRoute := &routev1.Route{}
+	err = r.Get(context.TODO(), types.NamespacedName{Name: profile.Name, Namespace: profile.Namespace}, oldRoute)
+	if err == nil {
+		log.Log.Info("Delete Route as it is outdated.")
+		err = r.Delete(context.TODO(), oldRoute)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
+	oldService := &corev1.Service{}
+	err = r.Get(context.TODO(), types.NamespacedName{Name: profile.Name, Namespace: profile.Namespace}, oldService)
+	if err == nil {
+		log.Log.Info("Delete Service as it is outdated.")
+		err = r.Delete(context.TODO(), oldService)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	oldDeployment := &appsv1.Deployment{}
@@ -125,16 +148,16 @@ func (r *CurriculumVitaeReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	service := r.createService(profile)
 	log.Log.Info("Create service.")
-	err = r.Create(ctx, service)	
-	if err!= nil {
+	err = r.Create(ctx, service)
+	if err != nil {
 		log.Log.Info("Requeue since there was an error while creating the Service.")
 		return ctrl.Result{}, err
 	}
 
-	route := r.createRoute(profile)			
+	route := r.createRoute(profile)
 	log.Log.Info("Create route.")
 	err = r.Create(ctx, route)
-	if err!= nil {
+	if err != nil {
 		log.Log.Info("Requeue since there was an error while creating the Route.")
 		return ctrl.Result{}, err
 	}
@@ -217,43 +240,6 @@ func (r *CurriculumVitaeReconciler) createDeployment(curriculumVitae *profilev1a
 		},
 	}
 
-	func (r *CurriculumVitaeReconciler) createService(curriculumVitae *profilev1alpha1.CurriculumVitae) *corev1.Service {
-		srv := &corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      curriculumVitae.Name+"-service",
-				Namespace: curriculumVitae.Namespace,
-			},
-			Spec: corev1.ServiceSpec{
-				Selector: curriculumVitae.Name,
-				Ports: []corev1.ServicePort{
-					Protocol: TCP,
-					Port: 8080,
-					TargetPort: intstr.Int0rString{
-						IntVal: 8080,
-					},
-				},
-			},
-		},
-	}
-
-	func (r *CurriculumVitaeReconciler) createRoute(curriculumVitae *profilev1alpha1.CurriculumVitae) *routev1.Route {
-		route := &routev1.Route{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      curriculumVitae.Name + "-route",
-				Namespace: curriculumVitae.Namespace,
-				},
-			Spec: routev1.RouteSpec{
-				To: routev1.RouteTargetReference{
-					Kind:      "Service",
-					Name:      curriculumVitae.Name + "-service",
-					Namespace: curriculumVitae.Namespace,
-					},
-				Port: 8080,
-				route.Spec.
-				},
-		}
-	}
-
 	ownerRef := &metav1.OwnerReference{
 		APIVersion: curriculumVitae.APIVersion,
 		Kind:       curriculumVitae.Kind,
@@ -264,6 +250,70 @@ func (r *CurriculumVitaeReconciler) createDeployment(curriculumVitae *profilev1a
 	deployment.SetOwnerReferences(ownerRefs)
 
 	return deployment
+}
+
+func (r *CurriculumVitaeReconciler) createService(curriculumVitae *profilev1alpha1.CurriculumVitae) *corev1.Service {
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      curriculumVitae.Name,
+			Namespace: curriculumVitae.Namespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: map[string]string{"app": curriculumVitae.Name},
+			Ports: []corev1.ServicePort{
+				{
+					Name:       "http",
+					Protocol:   corev1.ProtocolTCP,
+					Port:       8080,
+					TargetPort: intstr.FromInt(8080),
+				},
+			},
+		},
+	}
+
+	ownerRef := &metav1.OwnerReference{
+		APIVersion: curriculumVitae.APIVersion,
+		Kind:       curriculumVitae.Kind,
+		Name:       curriculumVitae.Name,
+		UID:        curriculumVitae.UID,
+	}
+	ownerRefs := []metav1.OwnerReference{*ownerRef}
+	svc.SetOwnerReferences(ownerRefs)
+
+	return svc
+}
+
+func (r *CurriculumVitaeReconciler) createRoute(curriculumVitae *profilev1alpha1.CurriculumVitae) *routev1.Route {
+	route := &routev1.Route{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      curriculumVitae.Name,
+			Namespace: curriculumVitae.Namespace,
+		},
+		Spec: routev1.RouteSpec{
+			To: routev1.RouteTargetReference{
+				Kind: "Service",
+				Name: curriculumVitae.Name,
+			},
+			Port: &routev1.RoutePort{
+				TargetPort: intstr.FromInt(8080),
+			},
+			TLS: &routev1.TLSConfig{
+				Termination:                   routev1.TLSTerminationEdge,
+				InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
+			},
+		},
+	}
+
+	ownerRef := &metav1.OwnerReference{
+		APIVersion: curriculumVitae.APIVersion,
+		Kind:       curriculumVitae.Kind,
+		Name:       curriculumVitae.Name,
+		UID:        curriculumVitae.UID,
+	}
+	ownerRefs := []metav1.OwnerReference{*ownerRef}
+	route.SetOwnerReferences(ownerRefs)
+
+	return route
 }
 
 // SetupWithManager sets up the controller with the Manager.
