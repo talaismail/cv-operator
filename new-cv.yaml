@@ -5,7 +5,7 @@ metadata:
 spec:
   name:
     firstName: John
-    middleName: Maxxxx
+    middleName: Max
     lastName: Doe
   contactInfo:
     postalCode: "10000"
